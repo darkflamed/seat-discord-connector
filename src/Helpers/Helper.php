@@ -35,6 +35,27 @@ use Warlof\Seat\Connector\Discord\Models\DiscordUser;
 class Helper
 {
     /**
+     * The Discord Public permission
+     *
+     * @var int
+     */
+    const EVERYONE = 0x00000000;
+
+    /**
+     * The Discord Administrator permission
+     *
+     * @var int
+     */
+    const ADMINISTRATOR = 0x00000008;
+
+    /**
+     * The Discord nickname length limit.
+     *
+     * @var int
+     */
+    const NICKNAME_LENGTH_LIMIT = 32;
+
+    /**
      * Return true if account is active
      *
      * An account is considered as active when both mail has been confirmed in case of mail activation,
@@ -126,5 +147,21 @@ class Helper
     public static function isAllowedRole(int $role_id, DiscordUser $discord_user)
     {
         return in_array($role_id, self::allowedRoles($discord_user));
+    }
+
+    /**
+     * Determine the value based on a list of masks by applying bitwise OR
+     *
+     * @param array $masks
+     * @return int
+     */
+    public static function arrayBitwiseOr(array $masks): int
+    {
+        $value = 0;
+
+        foreach ($masks as $mask)
+            $value |= $mask;
+
+        return $value;
     }
 }

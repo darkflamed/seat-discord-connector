@@ -2,7 +2,7 @@
 /**
  * This file is part of discord-connector and provides user synchronization between both SeAT and a Discord Guild
  *
- * Copyright (C) 2016, 2017, 2018  Loïc Leuilliot <loic.leuilliot@gmail.com>
+ * Copyright (C) 2016, 2017, 2018, 2019  Loïc Leuilliot <loic.leuilliot@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,9 +18,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*
- * TODO: lazy coder, remember to edit this file before TAG ! DAMMIT !
- */
 return [
-    'version'   => '3.2.1',
+    'user_mapping'       => 'Отображение пользователей',
+    'quick_create'       => 'Быстрое создание',
+    'authorization'      => 'Авторизация',
+    'user_filter'        => 'Пользовательский фильтр',
+    'role_filter'        => 'Фильтр по ролям',
+    'corporation_filter' => 'Корпоративный фильтр',
+    'title_filter'       => 'Фильтр по званиям',
+    'alliance_filter'    => 'Альянсовый фильтр',
+    'public_filter'      => 'Публичный фильтр',
+    'discord_role'       => 'Роль в Discord',
+    'join'               => 'Подключить Discord',
 ];

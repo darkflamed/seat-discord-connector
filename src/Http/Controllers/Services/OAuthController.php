@@ -26,6 +26,7 @@ use Illuminate\Http\Request;
 use RestCord\DiscordClient;
 use Seat\Web\Http\Controllers\Controller;
 use Warlof\Seat\Connector\Discord\Caches\RedisRateLimitProvider;
+use Warlof\Seat\Connector\Discord\Helpers\Helper;
 use Warlof\Seat\Connector\Discord\Http\Validation\ValidateOAuth;
 
 /**
@@ -39,6 +40,15 @@ class OAuthController extends Controller
      */
     const SCOPES = [
         'bot', 'guilds.join',
+    ];
+
+    const BOT_PERMISSIONS = [
+        'MANAGE_ROLES'          => 0x10000000,
+        'KICK_MEMBERS'          => 0x00000002,
+        'BAN_MEMBERS'           => 0x00000004,
+        'CREATE_INSTANT_INVITE' => 0x00000001,
+        'CHANGE_NICKNAME'       => 0x04000000,
+        'MANAGE_NICKNAMES'      => 0x08000000,
     ];
 
     /**
@@ -58,6 +68,8 @@ class OAuthController extends Controller
             'bot_token'     => $request->input('discord-configuration-bot'),
         ]]);
 
+        setting(['warlof.discord-connector.ticker', $request->input('discord-configuration-ticker')], true);
+
         return redirect($this->oAuthAuthorization($request->input('discord-configuration-client'), $state));
     }
 
@@ -70,20 +82,27 @@ class OAuthController extends Controller
     {
         // get back pending OAuth credentials validation from session
         $credentials = $request->session()->get('warlof.discord-connector.credentials');
+        $expected_permissions = Helper::arrayBitwiseOr(self::BOT_PERMISSIONS);
 
         $request->session()->forget('warlof.discord-connector.credentials');
 
         if (! $this->isValidCallback($credentials))
-            return redirect()->route('home')
+            return redirect()->route('discord-connector.configuration')
                 ->with('error', 'An error occurred while processing the request. ' .
                     'For some reason, your session was not met system requirement.');
 
         // ensure request is legitimate
         if ($credentials['state'] != $request->input('state')) {
-            return redirect()->back()
+            return redirect()->route('discord-connector.configuration')
                 ->with('error', 'An error occurred while getting back the token. Returned state value is wrong. ' .
                     'In order to prevent any security issue, we stopped transaction.');
         }
+
+        if ($expected_permissions != intval($request->input('permissions')))
+            return redirect()->route('discord-connector.configuration')
+                ->with('error',
+                    sprintf('An error occurred while getting back permissions. Returned permissions (%s) does not match ' .
+                        'with requested permissions (%s)', $request->input('permissions'), $expected_permissions));
 
         // validating Discord credentials
         try {
@@ -132,10 +151,12 @@ class OAuthController extends Controller
     {
         $base_uri = 'https://discordapp.com/api/oauth2/authorize?';
 
+        $permissions = Helper::arrayBitwiseOr(self::BOT_PERMISSIONS);
+
         return $base_uri . http_build_query([
             'response_type' => 'code',
             'client_id'     => $client_id,
-            'permissions'   => 469762055,
+            'permissions'   => $permissions,
             'scope'         => implode(' ', self::SCOPES),
             'state'         => $state,
             'redirect_uri'  => route('discord-connector.oauth.callback'),
@@ -159,7 +180,7 @@ class OAuthController extends Controller
             'grant_type'    => 'authorization_code',
             'code'          => $code,
             'redirect_uri'  => route('discord-connector.oauth.callback'),
-            'scope'         => implode(self::SCOPES, ' '),
+            'scope'         => implode(' ', self::SCOPES),
         ];
 
         $request = (new Client())->request('POST', 'https://discordapp.com/api/oauth2/token', [
