@@ -28,6 +28,7 @@ use RestCord\Model\Permissions\Role;
 use RestCord\Model\Guild\GuildMember;
 use Warlof\Seat\Connector\Discord\Exceptions\DiscordSettingException;
 use Warlof\Seat\Connector\Discord\Helpers\Helper;
+use Warlof\Seat\Connector\Discord\Models\DiscordLog;
 use Warlof\Seat\Connector\Discord\Models\DiscordUser;
 use Seat\Eveapi\Models\Corporation\CorporationInfo;
 
@@ -112,10 +113,23 @@ class MemberOrchestrator extends DiscordJobBase
         ]));
 
         // get Discord Guild Members
-        $this->members = $this->client->listGuildMembers([
+        $this->members = [];
+        $after = null;
+        $options = [
             'guild.id' => intval(setting('warlof.discord-connector.credentials.guild_id', true)),
             'limit' => 1000,
-        ]);
+        ];
+        do {
+            if ($after) {
+                $options['after'] = $after;
+            }
+            $members = $this->client->listGuildMembers($options);
+            if (empty($members)) {
+                break;
+            }
+            $this->members = array_merge($this->members, $members);
+            $after = end($members)->user->id;
+        } while (true);
 
         // loop over each Guild Member and apply policy
         foreach ($this->members as $member) {
@@ -140,7 +154,13 @@ class MemberOrchestrator extends DiscordJobBase
             try {
                 $this->processMappingBase($member, $discord_user);
             } catch (Exception $e) {
+                report($e);
                 logger()->error($e->getMessage(), $e->getTrace());
+                DiscordLog::create([
+                    'event' => 'sync',
+                    'message' => sprintf('Failed to sync user %s(%s). Please check worker log for more information.',
+                        $discord_user->nick, $discord_user->discord_id),
+                ]);
             }
         }
     }
@@ -160,12 +180,12 @@ class MemberOrchestrator extends DiscordJobBase
 
         // determine if the current Discord Member nickname is valid or flag it for change
         $expected_nickname = $this->buildDiscordUserNickname($discord_user);
-        if ($member->nick !== $expected_nickname)
+        if ($member->nick !== $expected_nickname && $member->user->username !== $expected_nickname)
             $new_nickname = $expected_nickname;
 
         // loop over roles owned by the user and prepare to drop them
         foreach ($member->roles as $role_id) {
-            if (! Helper::isAllowedRole($role_id, $discord_user) || $this->terminator)
+            if (! $discord_user->isAllowedRole($role_id) || $this->terminator)
                 $pending_drops->push($role_id);
         }
 
@@ -173,7 +193,7 @@ class MemberOrchestrator extends DiscordJobBase
         if (! $this->terminator) {
 
             // collect all currently valid roles
-            $roles = Helper::allowedRoles($discord_user);
+            $roles = $discord_user->allowedRoles();
 
             // loop over granted roles and prepare to add them
             foreach ($roles as $role_id) {
@@ -187,8 +207,16 @@ class MemberOrchestrator extends DiscordJobBase
         $is_roles_outdated = $pending_adds->count() > 0 || $pending_drops->count() > 0;
 
         // apply changes to the guild member
-        if ($is_roles_outdated || ! is_null($new_nickname))
+        if ($is_roles_outdated || ! is_null($new_nickname)) {
             $this->updateMemberRoles($member, $is_roles_outdated ? $roles : null, $new_nickname);
+            $discord_user->nick = $new_nickname;
+            $discord_user->save();
+            DiscordLog::create([
+                'event' => 'sync',
+                'message' => sprintf('Successfully sync user %s(%s).',
+                    $discord_user->nick, $discord_user->discord_id),
+            ]);
+        }
     }
 
     /**
@@ -276,7 +304,8 @@ class MemberOrchestrator extends DiscordJobBase
         // in case ticker prefix is enabled, retrieve the corporation and prepend the ticker to the nickname
         if (setting('warlof.discord-connector.ticker', true)) {
             $corporation = CorporationInfo::find($character->corporation_id);
-            $expected_nickname = sprintf('[%s] %s', $corporation->ticker, $expected_nickname);
+            $nickfmt = setting('warlof.discord-connector.nickfmt', true) ?: '[%s] %s';
+            $expected_nickname = sprintf($nickfmt, $corporation->ticker, $expected_nickname);
         }
 
         return Str::limit($expected_nickname, Helper::NICKNAME_LENGTH_LIMIT, '');

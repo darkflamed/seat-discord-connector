@@ -96,6 +96,26 @@
                             </div>
                         </div>
                     </div>
+
+                    <div class="form-group">
+                        <label for="discord-configuration-nick-format" class="col-md-4">Nickname Format</label>
+                        <div class="col-md-7">
+                            <div class="input-group input-group-sm">
+                                <input type="input" id="discord-configuration-nick-format"
+                                       name="discord-configuration-nick-format" value="{{ setting('warlof.discord-connector.nickfmt', true) ?: '[%s] %s' }}" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="discord-configuration-strict-security" class="col-md-4">Strict Security</label>
+                        <div class="col-md-7">
+                            <div class="input-group input-group-sm">
+                                <input type="checkbox" id="discord-configuration-strict-security"
+                                       name="discord-configuration-strict-security" @if(setting('warlof.discord-connector.strict', true)) checked="checked" @endif />
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="box-footer">
@@ -116,9 +136,13 @@
             <div class="form-group">
                 <div class="col-md-12">
                     @if(setting('warlof.discord-connector.credentials.token', true) == '')
-                        <a href="#" type="button" class="btn btn-success btn-md col-md-12 disabled" role="button">Update Discord roles</a>
+                        <button type="button" class="btn btn-success btn-md col-md-12 disabled" role="button">Update Discord roles</button>
                     @else
-                        <a href="{{ route('discord-connector.command.run', ['commandName' => 'discord:role:sync']) }}" type="button" class="btn btn-success btn-md col-md-12" role="button">Update Discord roles</a>
+                        <form method="post" action="{{ route('discord-connector.command.run') }}">
+                            {{ csrf_field() }}
+                            <input name="command_name" type="text" value="discord:role:sync" class="hidden" />
+                            <button type="submit" class="btn btn-success btn-md col-md-12" role="button">Update Discord roles</button>
+                        </form>
                     @endif
                     <span class="help-block">
                         This will update known roles from Discord.
@@ -129,9 +153,13 @@
             <div class="form-group">
                 <div class="col-md-12">
                     @if(setting('warlof.discord-connector.credentials.token', true) == '')
-                        <a href="#" type="button" class="btn btn-danger btn-md col-md-12 disabled" role="button">Reset everybody</a>
+                        <button type="button" class="btn btn-danger btn-md col-md-12 disabled" role="button">Reset everybody</button>
                     @else
-                        <a href="{{ route('discord-connector.command.run', ['commandName' => 'discord:user:terminator']) }}" type="button" class="btn btn-danger btn-md col-md-12" role="button">Reset everybody</a>
+                        <form method="post" action="{{ route('discord-connector.command.run') }}">
+                            {{ csrf_field() }}
+                            <input name="command_name" type="text" value="discord:user:terminator" class="hidden" />
+                            <button type="submit" class="btn btn-success btn-md col-md-12" role="button">Reset everybody</button>
+                        </form>
                     @endif
                     <span class="help-block">
                         This will remove roles from every members into the connected Discord Guild. Please proceed carefully.

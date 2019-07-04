@@ -78,12 +78,6 @@ class Invite extends DiscordJobBase
             throw new DiscordSettingException();
 
         $this->inviteUserIntoGuild();
-
-        DiscordLog::create([
-            'event' => 'binding',
-            'message' => sprintf('User %s has been successfully invited to the server.',
-                $this->discord_user->name),
-        ]);
     }
 
     /**
@@ -97,12 +91,13 @@ class Invite extends DiscordJobBase
 
         if (setting('warlof.discord-connector.ticker', true)) {
             $corporation = CorporationInfo::findOrFail($this->discord_user->group->main_character->corporation_id);
-            $expected_nickname = sprintf('[%s] %s', $corporation->ticker, $nickname);
+            $nickfmt = setting('warlof.discord-connector.nickfmt', true) ?: '[%s] %s';
+            $expected_nickname = sprintf($nickfmt, $corporation->ticker, $nickname);
         }
 
         $expected_nickname = Str::limit($expected_nickname, Helper::NICKNAME_LENGTH_LIMIT, '');
 
-        $roles = Helper::allowedRoles($this->discord_user);
+        $roles = $this->discord_user->allowedRoles();
 
         $options = [
             'user.id' => $this->discord_user->discord_id,
@@ -112,21 +107,38 @@ class Invite extends DiscordJobBase
         ];
 
         try {
-            $guild_member = app('discord')->guild->getGuildMember([
-                'guild.id' => intval(setting('warlof.discord-connector.credentials.guild_id', true)),
-                'user.id' => $this->discord_user->discord_id,
+            try {
+                $guild_member = app('discord')->guild->getGuildMember([
+                    'guild.id' => intval(setting('warlof.discord-connector.credentials.guild_id', true)),
+                    'user.id' => $this->discord_user->discord_id,
+                ]);
+
+                app('discord')->guild->modifyGuildMember($options);
+            } catch (\Exception $e) {
+                $options['access_token'] = $this->getAccessToken();
+                $guild_member = app('discord')->guild->addGuildMember($options);
+            }
+
+            if (property_exists($guild_member, 'nick') && ! is_null($guild_member->nick)) {
+                $this->discord_user->nick = $guild_member->nick;
+                $this->discord_user->save();
+            }
+            
+            DiscordLog::create([
+                'event' => 'invite',
+                'message' => sprintf('User %s(%s) has been successfully invited to the server.',
+                    $nickname, $this->discord_user->discord_id),
+            ]);
+        } catch (\Exception $e) {
+            DiscordLog::create([
+                'event' => 'invite',
+                'message' => sprintf('Failed to invite %s(%s) to your server. Please check worker log for more information.',
+                    $nickname, $this->discord_user->discord_id),
             ]);
 
-            app('discord')->guild->modifyGuildMember($options);
-        } catch (\Exception $e) {
-            $options['access_token'] = $this->getAccessToken();
-            $guild_member = app('discord')->guild->addGuildMember($options);
+            throw $e;
         }
 
-        if (property_exists($guild_member, 'nick') && ! is_null($guild_member->nick)) {
-            $this->discord_user->nick = $guild_member->nick;
-            $this->discord_user->save();
-        }
     }
 
     /**
