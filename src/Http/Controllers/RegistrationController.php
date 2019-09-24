@@ -87,8 +87,8 @@ class RegistrationController extends Controller
         $driver_user = User::updateOrCreate([
             'connector_type' => 'discord',
             'connector_id'   => $socialite_user->id,
-            'group_id'       => auth()->user()->group_id,
         ], [
+            'group_id'       => auth()->user()->group_id,
             'connector_name' => $socialite_user->nickname,
             'unique_id'      => $socialite_user->email,
         ]);
